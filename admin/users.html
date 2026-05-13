@@ -31,7 +31,6 @@
     </div>
   </header>
 
-  <!-- Admin Nav -->
   <nav class="admin-nav">
     <div class="admin-nav-inner">
       <a class="admin-nav-link" href="index.html">Auctions</a>
@@ -48,8 +47,11 @@
       </h2>
       <div class="admin-card">
 
-        <!-- Create User -->
-        <p class="subsection-title">Create New User</p>
+        <!-- Add User Form -->
+        <p class="subsection-title">Add User</p>
+        <p class="upload-hint">
+          Add a buyer's contact information. Login credentials can be set up later.
+        </p>
         <div class="create-user-grid">
           <div class="form-group">
             <label class="form-label">Email</label>
@@ -57,9 +59,9 @@
               placeholder="buyer@example.com" />
           </div>
           <div class="form-group">
-            <label class="form-label">Password</label>
-            <input class="form-input" type="password" id="new-user-password"
-              placeholder="Min. 6 characters" />
+            <label class="form-label">Phone</label>
+            <input class="form-input" type="tel" id="new-user-phone"
+              placeholder="555-555-5555" />
           </div>
           <div class="form-group">
             <label class="form-label">Role</label>
@@ -70,7 +72,7 @@
           </div>
           <div class="form-group form-group--action">
             <button class="btn-primary" id="create-user-btn" onclick="createUser()">
-              Create User
+              Add User
             </button>
           </div>
         </div>
@@ -78,7 +80,7 @@
 
         <div class="users-divider"></div>
 
-        <!-- Users List -->
+        <!-- Users Table -->
         <div id="users-list"></div>
 
       </div>
