@@ -21,8 +21,22 @@
       <div class="header-meta">
         <span class="auction-status loading" id="auction-status">Loading...</span>
         <span class="auction-close" id="auction-close"></span>
-        <span class="header-user" id="header-user"></span>
-        <button class="btn-signout" id="btn-signout" style="display:none;" onclick="signOut()">Sign Out</button>
+
+        <!-- User menu — populated by app.js once auth is confirmed -->
+        <div class="user-menu" id="user-menu" style="display:none;">
+          <button class="user-menu-trigger" id="user-menu-trigger" onclick="toggleUserMenu()">
+            <span id="header-user"></span>
+            <span class="menu-caret">&#9662;</span>
+          </button>
+          <div class="user-menu-dropdown" id="user-menu-dropdown">
+            <!-- Admin link — shown only if role === admin -->
+            <a class="menu-item admin-only" id="menu-admin-link" href="admin/" style="display:none;">
+              Admin Panel
+            </a>
+            <button class="menu-item menu-item--danger" onclick="signOut()">Sign Out</button>
+          </div>
+        </div>
+
       </div>
     </div>
   </header>

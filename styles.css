@@ -652,3 +652,78 @@ html {
   border-color: var(--color-border-hover);
   color: var(--color-text-primary);
 }
+
+/* ============================================================
+   USER MENU DROPDOWN
+============================================================ */
+.user-menu {
+  position: relative;
+}
+
+.user-menu-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.user-menu-trigger:hover {
+  border-color: var(--color-border-hover);
+  color: var(--color-text-primary);
+}
+
+.menu-caret {
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+
+.user-menu-dropdown {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  min-width: 160px;
+  z-index: 200;
+  overflow: hidden;
+}
+
+.user-menu-dropdown.open {
+  display: block;
+}
+
+.menu-item {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--color-text-primary);
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.1s ease;
+}
+
+.menu-item:hover {
+  background: var(--color-bg);
+}
+
+.menu-item--danger {
+  color: #A32D2D;
+}
+
+.menu-item--danger:hover {
+  background: #FCEBEB;
+}
