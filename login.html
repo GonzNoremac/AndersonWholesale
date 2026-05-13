@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Anderson Auto Group — Sign In</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script type="module" src="js/auth.js"></script>
+</head>
+<body class="login-page">
+
+  <div class="login-wrap">
+
+    <div class="login-brand">
+      <h1>Anderson Auto Group</h1>
+      <p>Monthly Wholesale Auction</p>
+    </div>
+
+    <div class="login-card">
+      <h2>Sign In</h2>
+      <p class="login-sub">Enter your credentials to access the auction.</p>
+
+      <!-- Error message -->
+      <div class="login-error" id="login-error" style="display:none;"></div>
+
+      <!-- Email -->
+      <div class="form-group">
+        <label class="form-label" for="email">Email</label>
+        <input
+          class="form-input"
+          type="email"
+          id="email"
+          placeholder="you@example.com"
+          autocomplete="email"
+          onkeydown="if(event.key==='Enter') login()"
+        />
+      </div>
+
+      <!-- Password -->
+      <div class="form-group">
+        <label class="form-label" for="password">Password</label>
+        <input
+          class="form-input"
+          type="password"
+          id="password"
+          placeholder="••••••••"
+          autocomplete="current-password"
+          onkeydown="if(event.key==='Enter') login()"
+        />
+      </div>
+
+      <button class="btn-primary" id="login-btn" onclick="login()">Sign In</button>
+    </div>
+
+  </div>
+
+</body>
+</html>
