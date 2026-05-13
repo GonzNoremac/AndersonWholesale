@@ -10,9 +10,6 @@
 </head>
 <body>
 
-  <!-- ============================
-       HEADER
-  ============================= -->
   <header class="site-header">
     <div class="header-inner">
       <div class="header-brand">
@@ -34,46 +31,49 @@
     </div>
   </header>
 
-  <!-- ============================
-       ADMIN CONTENT
-  ============================= -->
+  <!-- Admin Nav -->
+  <nav class="admin-nav">
+    <div class="admin-nav-inner">
+      <a class="admin-nav-link active" href="index.html">Auctions</a>
+      <a class="admin-nav-link" href="users.html">Users</a>
+    </div>
+  </nav>
+
   <main class="main-content" id="admin-content" style="display:none;">
 
-    <!-- ── ACTIVE AUCTION SESSION ── -->
-    <section class="admin-section" id="section-active-session">
+    <!-- ── ACTIVE AUCTION ── -->
+    <section class="admin-section">
       <h2 class="section-title">Active Auction</h2>
 
-      <!-- No active session state -->
+      <!-- No active session -->
       <div id="no-session-state" style="display:none;">
         <div class="empty-state">
           <p class="empty-state-msg">No active auction. Create one to get started.</p>
           <div class="create-session-form">
             <input class="form-input" type="text" id="new-session-name"
-              placeholder="e.g. June 2026" style="width:220px;" />
+              placeholder="e.g. June 2026" style="width:220px;"
+              onkeydown="if(event.key==='Enter') createSession()" />
             <button class="btn-primary" onclick="createSession()">Create Auction</button>
           </div>
         </div>
       </div>
 
-      <!-- Active session state -->
+      <!-- Active session -->
       <div id="active-session-state" style="display:none;">
         <div class="admin-card">
 
-          <!-- Session header row -->
           <div class="session-header">
             <div class="session-info">
               <span class="session-name" id="active-session-name"></span>
               <span class="session-badge open">Active</span>
             </div>
-            <div class="session-actions">
-              <button class="btn-danger" onclick="confirmCloseSession()">Close &amp; Archive Auction</button>
-            </div>
+            <button class="btn-danger" onclick="confirmCloseSession()">Close &amp; Archive Auction</button>
           </div>
 
           <div class="session-divider"></div>
 
-          <!-- Auction Settings -->
-          <div class="subsection-title">Settings</div>
+          <!-- Settings -->
+          <p class="subsection-title">Settings</p>
           <div class="settings-grid">
             <div class="form-group">
               <label class="form-label">Close Date</label>
@@ -86,8 +86,8 @@
 
           <div class="session-divider"></div>
 
-          <!-- Inventory Upload -->
-          <div class="subsection-title">Upload Inventory</div>
+          <!-- Upload -->
+          <p class="subsection-title">Upload Inventory</p>
           <p class="upload-hint">
             Upload your monthly vehicle list. Required columns:
             <strong>Stock #, Store, Year, Make, Model, Color, VIN, Miles, Reserve</strong>.
@@ -109,7 +109,7 @@
           </div>
           <div class="upload-actions" id="upload-actions" style="display:none;">
             <button class="btn-secondary" onclick="clearUpload()">Clear</button>
-            <button class="btn-primary" id="upload-btn" onclick="uploadVehicles()">Publish Inventory</button>
+            <button class="btn-primary" onclick="uploadVehicles()">Publish Inventory</button>
           </div>
           <div class="upload-progress" id="upload-progress" style="display:none;">
             <div class="progress-bar-wrap">
@@ -120,11 +120,11 @@
 
           <div class="session-divider"></div>
 
-          <!-- Current Vehicle List -->
+          <!-- Vehicles -->
           <div class="subsection-title-row">
             <span class="subsection-title">Current Vehicles</span>
             <span class="section-count" id="inventory-count"></span>
-            <button class="btn-danger btn-sm" onclick="confirmClearInventory()">Remove All Vehicles</button>
+            <button class="btn-danger btn-sm" onclick="confirmClearInventory()">Remove All</button>
           </div>
           <div id="inventory-list"></div>
 
@@ -132,56 +132,18 @@
       </div>
     </section>
 
-    <!-- ── ARCHIVED AUCTIONS ── -->
+    <!-- ── PAST AUCTIONS ── -->
     <section class="admin-section">
       <h2 class="section-title">
         Past Auctions
         <span class="section-count" id="archive-count"></span>
       </h2>
-      <div id="archive-list">
-        <!-- Populated by admin.js -->
-      </div>
-    </section>
-
-    <!-- ── USER MANAGEMENT ── -->
-    <section class="admin-section">
-      <h2 class="section-title">
-        Users
-        <span class="section-count" id="users-count"></span>
-      </h2>
-      <div class="admin-card">
-        <div class="subsection-title">Create New User</div>
-        <div class="create-user-grid">
-          <div class="form-group">
-            <label class="form-label">Email</label>
-            <input class="form-input" type="email" id="new-user-email" placeholder="buyer@example.com" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">Password</label>
-            <input class="form-input" type="password" id="new-user-password" placeholder="Min. 6 characters" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">Role</label>
-            <select class="form-input" id="new-user-role">
-              <option value="buyer">Buyer</option>
-              <option value="admin">Admin</option>
-            </select>
-          </div>
-          <div class="form-group form-group--action">
-            <button class="btn-primary" onclick="createUser()">Create User</button>
-          </div>
-        </div>
-        <div class="create-user-error" id="create-user-error" style="display:none;"></div>
-        <div class="users-divider"></div>
-        <div id="users-list"></div>
-      </div>
+      <div id="archive-list"></div>
     </section>
 
   </main>
 
-  <!-- ============================
-       ARCHIVED SESSION MODAL
-  ============================= -->
+  <!-- Archive Results Modal -->
   <div class="modal-overlay" id="modal-overlay" onclick="closeModal()" style="display:none;"></div>
   <div class="modal" id="archive-modal" style="display:none;">
     <div class="modal-header">

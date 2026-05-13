@@ -682,3 +682,36 @@
   .create-user-grid { grid-template-columns: 1fr; }
   .modal-stats { grid-template-columns: 1fr 1fr; }
 }
+
+/* ── Admin Nav ── */
+.admin-nav {
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.admin-nav-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  gap: 0;
+}
+
+.admin-nav-link {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  padding: 11px 16px;
+  border-bottom: 2px solid transparent;
+  transition: all 0.12s ease;
+}
+
+.admin-nav-link:hover {
+  color: var(--color-text-primary);
+}
+
+.admin-nav-link.active {
+  color: var(--color-blue);
+  border-bottom-color: var(--color-blue);
+}
