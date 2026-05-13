@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Anderson Auto Group — Admin</title>
+  <link rel="stylesheet" href="../styles.css" />
+  <link rel="stylesheet" href="admin.css" />
+  <script type="module" src="../js/admin.js"></script>
+</head>
+<body>
+
+  <!-- ============================
+       HEADER
+  ============================= -->
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="header-brand">
+        <h1>Anderson Auto Group</h1>
+        <p class="header-sub">Admin — Auction Management</p>
+      </div>
+      <div class="header-meta">
+        <a href="../index.html" class="btn-secondary">View Buyer Site</a>
+        <span class="header-user" id="header-user"></span>
+        <button class="btn-signout" id="btn-signout" onclick="adminSignOut()">Sign Out</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============================
+       ADMIN CONTENT
+       Hidden until auth confirmed
+  ============================= -->
+  <main class="main-content" id="admin-content" style="display:none;">
+
+    <!-- ── AUCTION CONTROLS ── -->
+    <section class="admin-section">
+      <h2 class="section-title">Auction Settings</h2>
+      <div class="admin-card">
+        <div class="settings-grid">
+
+          <div class="form-group">
+            <label class="form-label">Status</label>
+            <select class="form-input" id="auction-status-select">
+              <option value="open">Open</option>
+              <option value="closed">Closed</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Close Date</label>
+            <input class="form-input" type="date" id="auction-close-date" />
+          </div>
+
+          <div class="form-group form-group--action">
+            <button class="btn-primary" onclick="saveAuctionSettings()">Save Settings</button>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ── CSV UPLOAD ── -->
+    <section class="admin-section">
+      <h2 class="section-title">Upload Inventory</h2>
+      <div class="admin-card">
+
+        <p class="upload-hint">
+          Upload the monthly auction CSV. Required columns:
+          <strong>Stock #, Store, Year, Make, Model, Color, VIN, Miles, Reserve</strong>.
+          This will replace all current vehicles in Firestore.
+        </p>
+
+        <div class="upload-zone" id="upload-zone">
+          <input type="file" id="csv-file" accept=".csv" onchange="handleFileSelect(event)" />
+          <div class="upload-zone-inner" onclick="document.getElementById('csv-file').click()">
+            <span class="upload-icon">&#8593;</span>
+            <p class="upload-text">Click to select CSV file</p>
+            <p class="upload-sub" id="upload-filename">No file selected</p>
+          </div>
+        </div>
+
+        <div class="upload-preview" id="upload-preview" style="display:none;">
+          <p class="preview-label" id="preview-label"></p>
+          <div class="preview-table-wrap">
+            <table class="preview-table" id="preview-table"></table>
+          </div>
+        </div>
+
+        <div class="upload-actions" id="upload-actions" style="display:none;">
+          <button class="btn-secondary" onclick="clearUpload()">Clear</button>
+          <button class="btn-primary" id="upload-btn" onclick="uploadVehicles()">Upload to Firestore</button>
+        </div>
+
+        <div class="upload-progress" id="upload-progress" style="display:none;">
+          <div class="progress-bar-wrap">
+            <div class="progress-bar" id="progress-bar"></div>
+          </div>
+          <p class="progress-label" id="progress-label">Uploading...</p>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── CURRENT INVENTORY ── -->
+    <section class="admin-section">
+      <h2 class="section-title">
+        Current Inventory
+        <span class="section-count" id="inventory-count"></span>
+      </h2>
+      <div class="admin-card">
+        <div class="inventory-actions">
+          <button class="btn-danger" id="btn-clear-inventory" onclick="confirmClearInventory()">
+            Clear All Vehicles
+          </button>
+        </div>
+        <div id="inventory-list">
+          <!-- Populated by admin.js -->
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ============================
+       TOAST
+  ============================= -->
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+</body>
+</html>
