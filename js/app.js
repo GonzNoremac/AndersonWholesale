@@ -30,14 +30,13 @@ const db   = getFirestore(app);
 // ============================================================
 let allVehicles   = [];
 let activeFilter  = "all";
-let submittedBids = {};   // { stockNumber: true } — amounts never stored client-side
+let submittedBids = {};
 let currentUser   = null;
 
 // ============================================================
 //  AUTH GATE
-//  Page stays hidden until Firebase confirms a logged-in user
 // ============================================================
-onAuthStateChanged(auth, user => {
+onAuthStateChanged(auth, async user => {
   if (!user) {
     window.location.href = "login.html";
     return;
@@ -45,14 +44,39 @@ onAuthStateChanged(auth, user => {
 
   currentUser = user;
 
-  // Show header user info and sign out button
-  document.getElementById("header-user").textContent = user.email;
-  document.getElementById("btn-signout").style.display = "inline-block";
+  // Show user menu
+  document.getElementById("header-user").textContent   = user.email;
+  document.getElementById("user-menu").style.display   = "block";
+
+  // Check if admin — show Admin Panel link if so
+  try {
+    const userSnap = await getDoc(doc(db, "users", user.uid));
+    if (userSnap.exists() && userSnap.data().role === "admin") {
+      document.getElementById("menu-admin-link").style.display = "block";
+    }
+  } catch (err) {
+    console.error("Could not read user role:", err);
+  }
 
   // Reveal main content and load data
   document.getElementById("main-content").style.display = "block";
   loadAuctionMeta();
   loadVehicles();
+});
+
+// ============================================================
+//  USER MENU TOGGLE
+// ============================================================
+window.toggleUserMenu = function () {
+  document.getElementById("user-menu-dropdown").classList.toggle("open");
+};
+
+// Close menu when clicking outside
+document.addEventListener("click", e => {
+  const menu = document.getElementById("user-menu");
+  if (menu && !menu.contains(e.target)) {
+    document.getElementById("user-menu-dropdown")?.classList.remove("open");
+  }
 });
 
 // ============================================================
@@ -65,7 +89,6 @@ window.signOut = async function () {
 
 // ============================================================
 //  LOAD AUCTION META
-//  Document: auctions/current { status, closesAt }
 // ============================================================
 async function loadAuctionMeta() {
   try {
@@ -81,11 +104,11 @@ async function loadAuctionMeta() {
     if (closesAt) {
       const date = closesAt.toDate ? closesAt.toDate() : new Date(closesAt);
       const fmt  = date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-      document.getElementById("auction-close").textContent  = `Closes ${fmt}`;
-      document.getElementById("stat-closes").textContent    =
+      document.getElementById("auction-close").textContent =
+        `Closes ${fmt}`;
+      document.getElementById("stat-closes").textContent =
         date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
     }
-
   } catch (err) {
     console.error("Failed to load auction meta:", err);
   }
@@ -93,14 +116,20 @@ async function loadAuctionMeta() {
 
 // ============================================================
 //  LOAD VEHICLES
-//  Collection: vehicles — reserve field never rendered
 // ============================================================
 async function loadVehicles() {
   const listEl = document.getElementById("vehicle-list");
   listEl.innerHTML = `<div class="state-message"><strong>Loading inventory...</strong>Please wait.</div>`;
 
   try {
-    const snapshot = await getDocs(collection(db, "vehicles"));
+    // Find active session first
+    const sessionSnap = await getDocs(collection(db, "sessions"));
+    const activeSession = sessionSnap.docs.find(d => d.data().status === "active");
+    if (!activeSession) {
+      listEl.innerHTML = `<div class="state-message"><strong>No active auction.</strong>Check back when the next auction opens.</div>`;
+      return;
+    }
+    const snapshot = await getDocs(collection(db, "sessions", activeSession.id, "vehicles"));
 
     if (snapshot.empty) {
       listEl.innerHTML = `<div class="state-message"><strong>No vehicles listed.</strong>Check back when the next auction opens.</div>`;
@@ -119,7 +148,6 @@ async function loadVehicles() {
         color: v["Color"]   || "",
         vin:   v["VIN"]     || "",
         miles: v["Miles"]   || "",
-        // reserve intentionally excluded from client state
       };
     });
 
@@ -152,7 +180,6 @@ function updateBidStat() {
 // ============================================================
 function buildStoreFilters() {
   const stores = ["all", ...new Set(allVehicles.map(v => v.store))];
-
   document.getElementById("filter-buttons").innerHTML = stores.map(store => {
     const label  = store === "all" ? "All" : store.replace("Anderson ", "");
     const active = store === "all" ? "active" : "";
@@ -267,8 +294,6 @@ window.onBidInput = function (stock) {
 
 // ============================================================
 //  SUBMIT BID
-//  Writes to: bids/{stock}_{userId}
-//  Amount stored in Firestore — never rendered back to buyer
 // ============================================================
 window.submitBid = async function (stock) {
   const input  = document.getElementById(`input-${stock}`);
@@ -280,19 +305,22 @@ window.submitBid = async function (stock) {
   btn.textContent = "Saving...";
 
   try {
-    const bidRef = doc(db, "bids", `${stock}_${currentUser.uid}`);
+    // Get active session for bid path
+    const sessionSnap = await getDocs(collection(db, "sessions"));
+    const activeSession = sessionSnap.docs.find(d => d.data().status === "active");
+    if (!activeSession) { showToast("No active auction found."); return; }
+    const bidRef = doc(db, "sessions", activeSession.id, "bids", `${stock}_${currentUser.uid}`);
     await setDoc(bidRef, {
-      stock:     stock,
-      buyerId:   currentUser.uid,
+      stock:      stock,
+      buyerId:    currentUser.uid,
       buyerEmail: currentUser.email,
-      amount:    amount,
-      timestamp: new Date().toISOString()
+      amount:     amount,
+      timestamp:  new Date().toISOString()
     });
 
     submittedBids[stock] = true;
     updateBidStat();
 
-    // Re-render just this row
     const vehicle = allVehicles.find(v => v.stock === stock);
     const rowEl   = document.getElementById(`row-${stock}`);
     if (rowEl && vehicle) rowEl.outerHTML = buildVehicleRow(vehicle);
