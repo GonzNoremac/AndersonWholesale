@@ -1,19 +1,17 @@
 // ============================================================
-//  admin.js — Admin dashboard
+//  admin.js — Auction & session management
 //  Firestore structure:
-//    sessions/{sessionId}                 — auction session meta
-//    sessions/{sessionId}/vehicles/{id}  — vehicles for that auction
-//    sessions/{sessionId}/bids/{id}      — bids placed in that auction
-//    users/{uid}                          — user accounts + roles
+//    sessions/{sessionId}                — auction session meta
+//    sessions/{sessionId}/vehicles/{id} — vehicles for that auction
+//    sessions/{sessionId}/bids/{id}     — bids placed in that auction
 // ============================================================
 
-import { initializeApp }           from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth, onAuthStateChanged, signOut as fbSignOut,
-         createUserWithEmailAndPassword }
-                                    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { initializeApp }          from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, onAuthStateChanged, signOut as fbSignOut }
+                                   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getFirestore, collection, getDocs, doc, setDoc,
          getDoc, writeBatch, query, orderBy, updateDoc, serverTimestamp }
-                                    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+                                   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 // ============================================================
 //  FIREBASE CONFIG
@@ -27,16 +25,16 @@ const firebaseConfig = {
   appId:             "1:869988074727:web:f1b141289ba41d3d440e42"
 };
 
-const app  = initializeApp(firebaseConfig);
+const app  = initializeApp(firebaseConfig, "admin");
 const auth = getAuth(app);
 const db   = getFirestore(app);
 
 // ============================================================
 //  STATE
 // ============================================================
-let currentUser       = null;
-let activeSessionId   = null;   // Firestore doc ID of the active session
-let parsedVehicles    = [];
+let currentUser     = null;
+let activeSessionId = null;
+let parsedVehicles  = [];
 
 // ============================================================
 //  AUTH GATE
@@ -61,7 +59,6 @@ onAuthStateChanged(auth, async user => {
   document.getElementById("admin-content").style.display = "block";
 
   loadSessions();
-  loadUsers();
 });
 
 // ============================================================
@@ -84,7 +81,7 @@ window.adminSignOut = async function () {
 };
 
 // ============================================================
-//  SESSIONS — Load active + archived
+//  LOAD SESSIONS
 // ============================================================
 async function loadSessions() {
   try {
@@ -92,33 +89,32 @@ async function loadSessions() {
       query(collection(db, "sessions"), orderBy("createdAt", "desc"))
     );
 
-    const sessions  = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-    const active    = sessions.find(s => s.status === "active");
-    const archived  = sessions.filter(s => s.status === "archived");
+    const sessions = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    const active   = sessions.find(s => s.status === "active");
+    const archived = sessions.filter(s => s.status === "archived");
 
-    // Render active session
     if (active) {
       activeSessionId = active.id;
       showActiveSession(active);
       loadInventory();
     } else {
       activeSessionId = null;
-      document.getElementById("no-session-state").style.display    = "block";
+      document.getElementById("no-session-state").style.display     = "block";
       document.getElementById("active-session-state").style.display = "none";
     }
 
-    // Render archived sessions
     renderArchivedSessions(archived);
 
   } catch (err) {
     console.error("Failed to load sessions:", err);
+    showToast("Failed to load auction data.");
   }
 }
 
 function showActiveSession(session) {
-  document.getElementById("no-session-state").style.display    = "none";
+  document.getElementById("no-session-state").style.display     = "none";
   document.getElementById("active-session-state").style.display = "block";
-  document.getElementById("active-session-name").textContent   = session.name;
+  document.getElementById("active-session-name").textContent    = session.name;
 
   if (session.closesAt) {
     const date = session.closesAt.toDate
@@ -136,19 +132,16 @@ window.createSession = async function () {
   if (!name) { showToast("Please enter a name for the auction."); return; }
 
   try {
-    const sessionRef = doc(collection(db, "sessions"));
-    await setDoc(sessionRef, {
+    await setDoc(doc(collection(db, "sessions")), {
       name,
       status:    "active",
       createdAt: serverTimestamp(),
       closedAt:  null,
       closesAt:  null
     });
-
     showToast(`Auction "${name}" created.`);
     document.getElementById("new-session-name").value = "";
     loadSessions();
-
   } catch (err) {
     console.error("Failed to create session:", err);
     showToast("Failed to create auction. Please try again.");
@@ -156,7 +149,7 @@ window.createSession = async function () {
 };
 
 // ============================================================
-//  SAVE AUCTION SETTINGS (close date)
+//  SAVE SETTINGS
 // ============================================================
 window.saveAuctionSettings = async function () {
   if (!activeSessionId) return;
@@ -167,7 +160,7 @@ window.saveAuctionSettings = async function () {
     await updateDoc(doc(db, "sessions", activeSessionId), {
       closesAt: new Date(dateVal + "T23:59:59")
     });
-    showToast("Auction settings saved.");
+    showToast("Settings saved.");
   } catch (err) {
     console.error("Failed to save settings:", err);
     showToast("Failed to save settings.");
@@ -184,17 +177,14 @@ window.confirmCloseSession = function () {
 
 async function closeSession() {
   if (!activeSessionId) return;
-
   try {
     await updateDoc(doc(db, "sessions", activeSessionId), {
       status:   "archived",
       closedAt: serverTimestamp()
     });
-
     showToast("Auction closed and archived.");
     activeSessionId = null;
     loadSessions();
-
   } catch (err) {
     console.error("Failed to close session:", err);
     showToast("Failed to close auction.");
@@ -202,7 +192,7 @@ async function closeSession() {
 }
 
 // ============================================================
-//  ARCHIVED SESSIONS LIST
+//  ARCHIVED SESSIONS
 // ============================================================
 function renderArchivedSessions(archived) {
   const listEl = document.getElementById("archive-list");
@@ -221,7 +211,6 @@ function renderArchivedSessions(archived) {
     const closedAt = s.closedAt?.toDate
       ? s.closedAt.toDate().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
       : "—";
-
     return `
       <div class="archive-card">
         <div class="archive-card-info">
@@ -232,24 +221,26 @@ function renderArchivedSessions(archived) {
           <span>Opened ${createdAt}</span>
           <span>Closed ${closedAt}</span>
         </div>
-        <button class="btn-secondary" onclick="viewArchive('${s.id}', '${s.name}')">View Results</button>
+        <button class="btn-secondary" onclick="viewArchive('${s.id}', '${s.name}')">
+          View Results
+        </button>
       </div>
     `;
   }).join("")}</div>`;
 }
 
 // ============================================================
-//  VIEW ARCHIVED RESULTS (modal)
+//  VIEW ARCHIVE RESULTS MODAL
 // ============================================================
 window.viewArchive = async function (sessionId, sessionName) {
-  document.getElementById("modal-title").textContent = `${sessionName} — Results`;
-  document.getElementById("modal-body").innerHTML    = `<p style="color:var(--color-text-muted);text-align:center;padding:24px;">Loading results...</p>`;
+  document.getElementById("modal-title").textContent     = `${sessionName} — Results`;
+  document.getElementById("modal-body").innerHTML        =
+    `<p style="color:var(--color-text-muted);text-align:center;padding:24px;">Loading results...</p>`;
   document.getElementById("modal-overlay").style.display = "block";
   document.getElementById("archive-modal").style.display = "flex";
   document.getElementById("archive-modal").style.flexDirection = "column";
 
   try {
-    // Load vehicles and bids for this session in parallel
     const [vehicleSnap, bidSnap] = await Promise.all([
       getDocs(collection(db, "sessions", sessionId, "vehicles")),
       getDocs(collection(db, "sessions", sessionId, "bids"))
@@ -258,7 +249,7 @@ window.viewArchive = async function (sessionId, sessionName) {
     const vehicles = vehicleSnap.docs.map(d => d.data());
     const bids     = bidSnap.docs.map(d => d.data());
 
-    // Group bids by stock — find highest bid per vehicle
+    // Find highest bid per vehicle
     const bidsByStock = {};
     bids.forEach(bid => {
       if (!bidsByStock[bid.stock] || bid.amount > bidsByStock[bid.stock].amount) {
@@ -266,10 +257,7 @@ window.viewArchive = async function (sessionId, sessionName) {
       }
     });
 
-    const soldCount   = vehicles.filter(v => bidsByStock[v["Stock #"]]).length;
-    const totalBids   = bids.length;
-    const totalValue  = Object.values(bidsByStock)
-      .reduce((sum, b) => sum + (b.amount || 0), 0);
+    const soldCount  = vehicles.filter(v => bidsByStock[v["Stock #"]]).length;
 
     document.getElementById("modal-body").innerHTML = `
       <div class="modal-stats">
@@ -278,15 +266,14 @@ window.viewArchive = async function (sessionId, sessionName) {
           <div class="val">${vehicles.length}</div>
         </div>
         <div class="modal-stat">
-          <div class="lbl">Sold</div>
-          <div class="val">${soldCount}</div>
+          <div class="lbl">Bids Received</div>
+          <div class="val">${bids.length}</div>
         </div>
         <div class="modal-stat">
-          <div class="lbl">Total Bids</div>
-          <div class="val">${totalBids}</div>
+          <div class="lbl">Vehicles Sold</div>
+          <div class="val">${soldCount}</div>
         </div>
       </div>
-
       <div class="results-table-wrap">
         <table class="results-table">
           <thead>
@@ -302,23 +289,25 @@ window.viewArchive = async function (sessionId, sessionName) {
             </tr>
           </thead>
           <tbody>
-            ${vehicles.sort((a,b) => (a["Stock #"]||"").localeCompare(b["Stock #"]||""))
+            ${vehicles
+              .sort((a, b) => (a["Stock #"] || "").localeCompare(b["Stock #"] || ""))
               .map(v => {
                 const winner     = bidsByStock[v["Stock #"]];
                 const reserve    = Number(v["Reserve"] || 0);
-                const hasBid     = !!winner;
-                const metReserve = hasBid && winner.amount >= reserve;
-
+                const metReserve = winner && winner.amount >= reserve;
                 return `
-                  <tr class="${hasBid ? "winner-row" : ""}">
+                  <tr class="${winner ? "winner-row" : ""}">
                     <td>${v["Stock #"] || "—"}</td>
                     <td>${v["Year"] || ""} ${v["Make"] || ""} ${v["Model"] || ""}</td>
                     <td>${(v["Store"] || "—").replace("Anderson ", "")}</td>
-                    <td>${(!v["Miles"] || Number(v["Miles"]) === 0) ? "—" : Number(v["Miles"]).toLocaleString()}</td>
+                    <td>${(!v["Miles"] || Number(v["Miles"]) === 0)
+                      ? "—" : Number(v["Miles"]).toLocaleString()}</td>
                     <td>$${reserve.toLocaleString()}</td>
-                    <td>${hasBid ? `$${Number(winner.amount).toLocaleString()}` : `<span class="no-bid-tag">No bids</span>`}</td>
-                    <td>${hasBid ? (winner.buyerEmail || winner.buyerId) : "—"}</td>
-                    <td>${hasBid
+                    <td>${winner
+                      ? `$${Number(winner.amount).toLocaleString()}`
+                      : `<span class="no-bid-tag">No bids</span>`}</td>
+                    <td>${winner ? (winner.buyerEmail || "—") : "—"}</td>
+                    <td>${winner
                       ? `<span class="sold-tag">${metReserve ? "Sold" : "Reserve not met"}</span>`
                       : "—"}</td>
                   </tr>
@@ -328,9 +317,8 @@ window.viewArchive = async function (sessionId, sessionName) {
         </table>
       </div>
     `;
-
   } catch (err) {
-    console.error("Failed to load archive results:", err);
+    console.error("Failed to load archive:", err);
     document.getElementById("modal-body").innerHTML =
       `<p style="color:#A32D2D;text-align:center;padding:24px;">Failed to load results.</p>`;
   }
@@ -360,26 +348,24 @@ function parseCSV(text) {
   const headers  = lines[0].split(",").map(h => h.trim());
   const required = ["Stock #", "Store", "Year", "Make", "Model", "Color", "VIN", "Miles", "Reserve"];
   const missing  = required.filter(r => !headers.includes(r));
+  if (missing.length) { showToast(`Missing columns: ${missing.join(", ")}`); return; }
 
-  if (missing.length > 0) { showToast(`Missing columns: ${missing.join(", ")}`); return; }
-
-  parsedVehicles = lines.slice(1).map(line => {
-    const values = line.split(",").map(v => v.trim());
-    const obj    = {};
-    headers.forEach((h, i) => { obj[h] = values[i] || ""; });
-    return obj;
-  }).filter(v => v["Stock #"]);
+  parsedVehicles = lines.slice(1)
+    .map(line => {
+      const values = line.split(",").map(v => v.trim());
+      const obj    = {};
+      headers.forEach((h, i) => { obj[h] = values[i] || ""; });
+      return obj;
+    })
+    .filter(v => v["Stock #"]);
 
   showPreview(headers, parsedVehicles);
 }
 
 function showPreview(headers, vehicles) {
   document.getElementById("preview-label").textContent = `${vehicles.length} vehicles ready to publish`;
-
   document.getElementById("preview-table").innerHTML = `
-    <thead>
-      <tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr>
-    </thead>
+    <thead><tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr></thead>
     <tbody>
       ${vehicles.slice(0, 10).map(v =>
         `<tr>${headers.map(h => `<td>${v[h] || "—"}</td>`).join("")}</tr>`
@@ -391,7 +377,6 @@ function showPreview(headers, vehicles) {
         : ""}
     </tbody>
   `;
-
   document.getElementById("upload-preview").style.display = "block";
   document.getElementById("upload-actions").style.display = "flex";
 }
@@ -406,7 +391,7 @@ window.clearUpload = function () {
 };
 
 // ============================================================
-//  PUBLISH VEHICLES to sessions/{id}/vehicles
+//  PUBLISH VEHICLES
 // ============================================================
 window.uploadVehicles = async function () {
   if (!parsedVehicles.length || !activeSessionId) return;
@@ -425,22 +410,20 @@ window.uploadVehicles = async function () {
     for (let i = 0; i < total; i += BATCH_SIZE) {
       const chunk = parsedVehicles.slice(i, i + BATCH_SIZE);
       const batch = writeBatch(db);
-      chunk.forEach(vehicle => {
-        const stockId = vehicle["Stock #"].replace(/[^a-zA-Z0-9]/g, "_");
-        batch.set(doc(db, "sessions", activeSessionId, "vehicles", stockId), vehicle);
+      chunk.forEach(v => {
+        const id = v["Stock #"].replace(/[^a-zA-Z0-9]/g, "_");
+        batch.set(doc(db, "sessions", activeSessionId, "vehicles", id), v);
       });
       await batch.commit();
       uploaded += chunk.length;
       progressBar.style.width = `${Math.round((uploaded / total) * 100)}%`;
       progressLbl.textContent = `Publishing... ${uploaded} of ${total}`;
     }
-
     progressBar.style.width = "100%";
     progressLbl.textContent = `Done — ${total} vehicles published.`;
     showToast(`${total} vehicles published to the auction.`);
     loadInventory();
     setTimeout(() => clearUpload(), 2000);
-
   } catch (err) {
     console.error("Publish failed:", err);
     progressLbl.textContent = "Publish failed. Please try again.";
@@ -449,7 +432,7 @@ window.uploadVehicles = async function () {
 };
 
 // ============================================================
-//  LOAD CURRENT INVENTORY from active session
+//  INVENTORY
 // ============================================================
 async function loadInventory() {
   if (!activeSessionId) return;
@@ -460,7 +443,6 @@ async function loadInventory() {
     const snapshot = await getDocs(
       collection(db, "sessions", activeSessionId, "vehicles")
     );
-
     document.getElementById("inventory-count").textContent =
       snapshot.empty ? "" : `(${snapshot.size})`;
 
@@ -490,7 +472,8 @@ async function loadInventory() {
                 <td>${v["Make"]  || "—"}</td>
                 <td>${v["Model"] || "—"}</td>
                 <td>${(!v["Color"] || v["Color"] === "0") ? "—" : v["Color"]}</td>
-                <td>${(!v["Miles"] || Number(v["Miles"]) === 0) ? "—" : Number(v["Miles"]).toLocaleString()}</td>
+                <td>${(!v["Miles"] || Number(v["Miles"]) === 0)
+                  ? "—" : Number(v["Miles"]).toLocaleString()}</td>
                 <td style="font-family:var(--font-mono);font-size:11px;">${v["VIN"] || "—"}</td>
                 <td>$${Number(v["Reserve"] || 0).toLocaleString()}</td>
               </tr>
@@ -526,110 +509,6 @@ async function clearInventory() {
   } catch (err) {
     console.error("Failed to remove vehicles:", err);
     showToast("Failed to remove vehicles.");
-  }
-}
-
-// ============================================================
-//  USER MANAGEMENT
-// ============================================================
-async function loadUsers() {
-  const listEl = document.getElementById("users-list");
-  listEl.innerHTML = `<p class="users-empty">Loading...</p>`;
-
-  try {
-    const snapshot = await getDocs(collection(db, "users"));
-    document.getElementById("users-count").textContent =
-      snapshot.empty ? "" : `(${snapshot.size})`;
-
-    if (snapshot.empty) {
-      listEl.innerHTML = `<p class="users-empty">No users found.</p>`;
-      return;
-    }
-
-    const users = snapshot.docs.map(d => ({ uid: d.id, ...d.data() }))
-      .sort((a, b) => (a.email || "").localeCompare(b.email || ""));
-
-    listEl.innerHTML = `
-      <div class="users-table-wrap">
-        <table class="users-table">
-          <thead>
-            <tr>
-              <th>Email</th><th>Role</th><th>Created</th><th>UID</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${users.map(u => `
-              <tr>
-                <td>${u.email || "—"}</td>
-                <td>
-                  <span class="role-badge ${u.role === "admin" ? "admin" : "buyer"}">
-                    ${u.role || "buyer"}
-                  </span>
-                </td>
-                <td>${u.createdAt
-                  ? new Date(u.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-                  : "—"}</td>
-                <td style="font-family:var(--font-mono);font-size:11px;color:var(--color-text-muted);">${u.uid}</td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
-      </div>
-    `;
-  } catch (err) {
-    console.error("Failed to load users:", err);
-    listEl.innerHTML = `<p class="users-empty">Failed to load users.</p>`;
-  }
-}
-
-window.createUser = async function () {
-  const email    = document.getElementById("new-user-email").value.trim();
-  const password = document.getElementById("new-user-password").value;
-  const role     = document.getElementById("new-user-role").value;
-  const errorEl  = document.getElementById("create-user-error");
-
-  errorEl.style.display = "none";
-
-  if (!email || !password) {
-    errorEl.textContent   = "Email and password are required.";
-    errorEl.style.display = "block";
-    return;
-  }
-
-  if (password.length < 6) {
-    errorEl.textContent   = "Password must be at least 6 characters.";
-    errorEl.style.display = "block";
-    return;
-  }
-
-  try {
-    const credential = await createUserWithEmailAndPassword(auth, email, password);
-    await setDoc(doc(db, "users", credential.user.uid), {
-      email,
-      role,
-      createdAt: new Date().toISOString()
-    });
-
-    document.getElementById("new-user-email").value    = "";
-    document.getElementById("new-user-password").value = "";
-    document.getElementById("new-user-role").value     = "buyer";
-
-    showToast(`User created: ${email}`);
-    loadUsers();
-
-  } catch (err) {
-    console.error("Failed to create user:", err);
-    errorEl.textContent   = friendlyAuthError(err.code);
-    errorEl.style.display = "block";
-  }
-};
-
-function friendlyAuthError(code) {
-  switch (code) {
-    case "auth/email-already-in-use": return "An account with that email already exists.";
-    case "auth/invalid-email":        return "Please enter a valid email address.";
-    case "auth/weak-password":        return "Password must be at least 6 characters.";
-    default:                          return "Failed to create user. Please try again.";
   }
 }
 
