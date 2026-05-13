@@ -21,110 +21,176 @@
       </div>
       <div class="header-meta">
         <a href="../index.html" class="btn-secondary">View Buyer Site</a>
-        <span class="header-user" id="header-user"></span>
-        <button class="btn-signout" id="btn-signout" onclick="adminSignOut()">Sign Out</button>
+        <div class="user-menu" id="user-menu" style="display:none;">
+          <button class="user-menu-trigger" onclick="toggleUserMenu()">
+            <span id="header-user"></span>
+            <span class="menu-caret">&#9662;</span>
+          </button>
+          <div class="user-menu-dropdown" id="user-menu-dropdown">
+            <button class="menu-item menu-item--danger" onclick="adminSignOut()">Sign Out</button>
+          </div>
+        </div>
       </div>
     </div>
   </header>
 
   <!-- ============================
        ADMIN CONTENT
-       Hidden until auth confirmed
   ============================= -->
   <main class="main-content" id="admin-content" style="display:none;">
 
-    <!-- ── AUCTION CONTROLS ── -->
-    <section class="admin-section">
-      <h2 class="section-title">Auction Settings</h2>
-      <div class="admin-card">
-        <div class="settings-grid">
+    <!-- ── ACTIVE AUCTION SESSION ── -->
+    <section class="admin-section" id="section-active-session">
+      <h2 class="section-title">Active Auction</h2>
 
-          <div class="form-group">
-            <label class="form-label">Status</label>
-            <select class="form-input" id="auction-status-select">
-              <option value="open">Open</option>
-              <option value="closed">Closed</option>
-            </select>
+      <!-- No active session state -->
+      <div id="no-session-state" style="display:none;">
+        <div class="empty-state">
+          <p class="empty-state-msg">No active auction. Create one to get started.</p>
+          <div class="create-session-form">
+            <input class="form-input" type="text" id="new-session-name"
+              placeholder="e.g. June 2026" style="width:220px;" />
+            <button class="btn-primary" onclick="createSession()">Create Auction</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Active session state -->
+      <div id="active-session-state" style="display:none;">
+        <div class="admin-card">
+
+          <!-- Session header row -->
+          <div class="session-header">
+            <div class="session-info">
+              <span class="session-name" id="active-session-name"></span>
+              <span class="session-badge open">Active</span>
+            </div>
+            <div class="session-actions">
+              <button class="btn-danger" onclick="confirmCloseSession()">Close &amp; Archive Auction</button>
+            </div>
           </div>
 
-          <div class="form-group">
-            <label class="form-label">Close Date</label>
-            <input class="form-input" type="date" id="auction-close-date" />
+          <div class="session-divider"></div>
+
+          <!-- Auction Settings -->
+          <div class="subsection-title">Settings</div>
+          <div class="settings-grid">
+            <div class="form-group">
+              <label class="form-label">Close Date</label>
+              <input class="form-input" type="date" id="auction-close-date" />
+            </div>
+            <div class="form-group form-group--action">
+              <button class="btn-primary" onclick="saveAuctionSettings()">Save</button>
+            </div>
           </div>
 
-          <div class="form-group form-group--action">
-            <button class="btn-primary" onclick="saveAuctionSettings()">Save Settings</button>
+          <div class="session-divider"></div>
+
+          <!-- Inventory Upload -->
+          <div class="subsection-title">Upload Inventory</div>
+          <p class="upload-hint">
+            Upload your monthly vehicle list. Required columns:
+            <strong>Stock #, Store, Year, Make, Model, Color, VIN, Miles, Reserve</strong>.
+            Publishing will replace all vehicles in this auction.
+          </p>
+          <div class="upload-zone">
+            <input type="file" id="csv-file" accept=".csv" onchange="handleFileSelect(event)" />
+            <div class="upload-zone-inner" onclick="document.getElementById('csv-file').click()">
+              <span class="upload-icon">&#8593;</span>
+              <p class="upload-text">Click to select CSV file</p>
+              <p class="upload-sub" id="upload-filename">No file selected</p>
+            </div>
           </div>
+          <div class="upload-preview" id="upload-preview" style="display:none;">
+            <p class="preview-label" id="preview-label"></p>
+            <div class="preview-table-wrap">
+              <table class="preview-table" id="preview-table"></table>
+            </div>
+          </div>
+          <div class="upload-actions" id="upload-actions" style="display:none;">
+            <button class="btn-secondary" onclick="clearUpload()">Clear</button>
+            <button class="btn-primary" id="upload-btn" onclick="uploadVehicles()">Publish Inventory</button>
+          </div>
+          <div class="upload-progress" id="upload-progress" style="display:none;">
+            <div class="progress-bar-wrap">
+              <div class="progress-bar" id="progress-bar"></div>
+            </div>
+            <p class="progress-label" id="progress-label">Publishing...</p>
+          </div>
+
+          <div class="session-divider"></div>
+
+          <!-- Current Vehicle List -->
+          <div class="subsection-title-row">
+            <span class="subsection-title">Current Vehicles</span>
+            <span class="section-count" id="inventory-count"></span>
+            <button class="btn-danger btn-sm" onclick="confirmClearInventory()">Remove All Vehicles</button>
+          </div>
+          <div id="inventory-list"></div>
 
         </div>
       </div>
     </section>
 
-    <!-- ── CSV UPLOAD ── -->
-    <section class="admin-section">
-      <h2 class="section-title">Upload Inventory</h2>
-      <div class="admin-card">
-
-        <p class="upload-hint">
-          Upload the monthly auction CSV. Required columns:
-          <strong>Stock #, Store, Year, Make, Model, Color, VIN, Miles, Reserve</strong>.
-          This will replace all current vehicles in Firestore.
-        </p>
-
-        <div class="upload-zone" id="upload-zone">
-          <input type="file" id="csv-file" accept=".csv" onchange="handleFileSelect(event)" />
-          <div class="upload-zone-inner" onclick="document.getElementById('csv-file').click()">
-            <span class="upload-icon">&#8593;</span>
-            <p class="upload-text">Click to select CSV file</p>
-            <p class="upload-sub" id="upload-filename">No file selected</p>
-          </div>
-        </div>
-
-        <div class="upload-preview" id="upload-preview" style="display:none;">
-          <p class="preview-label" id="preview-label"></p>
-          <div class="preview-table-wrap">
-            <table class="preview-table" id="preview-table"></table>
-          </div>
-        </div>
-
-        <div class="upload-actions" id="upload-actions" style="display:none;">
-          <button class="btn-secondary" onclick="clearUpload()">Clear</button>
-          <button class="btn-primary" id="upload-btn" onclick="uploadVehicles()">Upload to Firestore</button>
-        </div>
-
-        <div class="upload-progress" id="upload-progress" style="display:none;">
-          <div class="progress-bar-wrap">
-            <div class="progress-bar" id="progress-bar"></div>
-          </div>
-          <p class="progress-label" id="progress-label">Uploading...</p>
-        </div>
-
-      </div>
-    </section>
-
-    <!-- ── CURRENT INVENTORY ── -->
+    <!-- ── ARCHIVED AUCTIONS ── -->
     <section class="admin-section">
       <h2 class="section-title">
-        Current Inventory
-        <span class="section-count" id="inventory-count"></span>
+        Past Auctions
+        <span class="section-count" id="archive-count"></span>
+      </h2>
+      <div id="archive-list">
+        <!-- Populated by admin.js -->
+      </div>
+    </section>
+
+    <!-- ── USER MANAGEMENT ── -->
+    <section class="admin-section">
+      <h2 class="section-title">
+        Users
+        <span class="section-count" id="users-count"></span>
       </h2>
       <div class="admin-card">
-        <div class="inventory-actions">
-          <button class="btn-danger" id="btn-clear-inventory" onclick="confirmClearInventory()">
-            Clear All Vehicles
-          </button>
+        <div class="subsection-title">Create New User</div>
+        <div class="create-user-grid">
+          <div class="form-group">
+            <label class="form-label">Email</label>
+            <input class="form-input" type="email" id="new-user-email" placeholder="buyer@example.com" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input class="form-input" type="password" id="new-user-password" placeholder="Min. 6 characters" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Role</label>
+            <select class="form-input" id="new-user-role">
+              <option value="buyer">Buyer</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <div class="form-group form-group--action">
+            <button class="btn-primary" onclick="createUser()">Create User</button>
+          </div>
         </div>
-        <div id="inventory-list">
-          <!-- Populated by admin.js -->
-        </div>
+        <div class="create-user-error" id="create-user-error" style="display:none;"></div>
+        <div class="users-divider"></div>
+        <div id="users-list"></div>
       </div>
     </section>
 
   </main>
 
   <!-- ============================
-       TOAST
+       ARCHIVED SESSION MODAL
   ============================= -->
+  <div class="modal-overlay" id="modal-overlay" onclick="closeModal()" style="display:none;"></div>
+  <div class="modal" id="archive-modal" style="display:none;">
+    <div class="modal-header">
+      <h3 class="modal-title" id="modal-title"></h3>
+      <button class="modal-close" onclick="closeModal()">&#10005;</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 </body>
