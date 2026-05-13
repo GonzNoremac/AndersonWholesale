@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Anderson Auto Group — Auction</title>
+
+  <!-- Firebase SDK -->
+  <script type="module" src="js/app.js"></script>
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- ============================
+       HEADER
+  ============================= -->
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="header-brand">
+        <h1>Anderson Auto Group</h1>
+        <p class="header-sub">Monthly Wholesale Auction</p>
+      </div>
+      <div class="header-meta">
+        <span class="auction-status" id="auction-status">Loading...</span>
+        <span class="auction-close" id="auction-close"></span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============================
+       MAIN CONTENT
+  ============================= -->
+  <main class="main-content">
+
+    <!-- Stats Bar -->
+    <section class="stats-bar" aria-label="Auction summary">
+      <div class="stat-card">
+        <span class="stat-label">Total Vehicles</span>
+        <span class="stat-value" id="stat-total">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Stores</span>
+        <span class="stat-value" id="stat-stores">—</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Your Bids</span>
+        <span class="stat-value" id="stat-bids">0</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Closes</span>
+        <span class="stat-value" id="stat-closes">—</span>
+      </div>
+    </section>
+
+    <!-- Filter Bar -->
+    <section class="filter-bar" aria-label="Filter by store">
+      <span class="filter-label">Store:</span>
+      <div class="filter-buttons" id="filter-buttons">
+        <!-- Populated by app.js -->
+      </div>
+    </section>
+
+    <!-- Vehicle Count -->
+    <p class="showing-label" id="showing-label"></p>
+
+    <!-- Vehicle List -->
+    <section class="vehicle-list" id="vehicle-list" aria-label="Vehicle listings">
+      <!-- Populated by app.js -->
+    </section>
+
+  </main>
+
+  <!-- ============================
+       BID CONFIRMATION TOAST
+  ============================= -->
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+</body>
+</html>
