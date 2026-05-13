@@ -1,33 +1,13 @@
 // ============================================================
 //  admin.js — Auction & session management
-//  Firestore structure:
-//    sessions/{sessionId}                — auction session meta
-//    sessions/{sessionId}/vehicles/{id} — vehicles for that auction
-//    sessions/{sessionId}/bids/{id}     — bids placed in that auction
 // ============================================================
 
-import { initializeApp }          from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth, onAuthStateChanged, signOut as fbSignOut }
-                                   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, collection, getDocs, doc, setDoc,
-         getDoc, writeBatch, query, orderBy, updateDoc, serverTimestamp }
-                                   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
-// ============================================================
-//  FIREBASE CONFIG
-// ============================================================
-const firebaseConfig = {
-  apiKey:            "AIzaSyBUYsfVLBF6kF9pcnOguREn3dQQBvGfVbo",
-  authDomain:        "andersonwholesale-2d4f4.firebaseapp.com",
-  projectId:         "andersonwholesale-2d4f4",
-  storageBucket:     "andersonwholesale-2d4f4.firebasestorage.app",
-  messagingSenderId: "869988074727",
-  appId:             "1:869988074727:web:f1b141289ba41d3d440e42"
-};
-
-const app  = initializeApp(firebaseConfig, "admin");
-const auth = getAuth(app);
-const db   = getFirestore(app);
+import { auth, db }                          from "./firebase.js";
+import { onAuthStateChanged, signOut
+         as fbSignOut }                      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { collection, getDocs, doc, setDoc,
+         getDoc, writeBatch, query, orderBy,
+         updateDoc, serverTimestamp }        from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 // ============================================================
 //  STATE
@@ -35,20 +15,30 @@ const db   = getFirestore(app);
 let currentUser     = null;
 let activeSessionId = null;
 let parsedVehicles  = [];
+let authResolved    = false;
 
 // ============================================================
 //  AUTH GATE
 // ============================================================
 onAuthStateChanged(auth, async user => {
+  if (authResolved) return;
+  authResolved = true;
+
   if (!user) {
     window.location.href = "../login.html";
     return;
   }
 
-  const userSnap = await getDoc(doc(db, "users", user.uid));
-  if (!userSnap.exists() || userSnap.data().role !== "admin") {
-    alert("Access denied. Admin accounts only.");
-    await fbSignOut(auth);
+  try {
+    const userSnap = await getDoc(doc(db, "users", user.uid));
+    if (!userSnap.exists() || userSnap.data().role !== "admin") {
+      alert("Access denied. Admin accounts only.");
+      await fbSignOut(auth);
+      window.location.href = "../login.html";
+      return;
+    }
+  } catch (err) {
+    console.error("Role check failed:", err);
     window.location.href = "../login.html";
     return;
   }
@@ -76,19 +66,19 @@ document.addEventListener("click", e => {
 });
 
 window.adminSignOut = async function () {
+  authResolved = false;
   await fbSignOut(auth);
   window.location.href = "../login.html";
 };
 
 // ============================================================
-//  LOAD SESSIONS
+//  SESSIONS
 // ============================================================
 async function loadSessions() {
   try {
     const snapshot = await getDocs(
       query(collection(db, "sessions"), orderBy("createdAt", "desc"))
     );
-
     const sessions = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
     const active   = sessions.find(s => s.status === "active");
     const archived = sessions.filter(s => s.status === "archived");
@@ -124,9 +114,6 @@ function showActiveSession(session) {
   }
 }
 
-// ============================================================
-//  CREATE SESSION
-// ============================================================
 window.createSession = async function () {
   const name = document.getElementById("new-session-name").value.trim();
   if (!name) { showToast("Please enter a name for the auction."); return; }
@@ -148,9 +135,6 @@ window.createSession = async function () {
   }
 };
 
-// ============================================================
-//  SAVE SETTINGS
-// ============================================================
 window.saveAuctionSettings = async function () {
   if (!activeSessionId) return;
   const dateVal = document.getElementById("auction-close-date").value;
@@ -162,14 +146,11 @@ window.saveAuctionSettings = async function () {
     });
     showToast("Settings saved.");
   } catch (err) {
-    console.error("Failed to save settings:", err);
+    console.error("Save failed:", err);
     showToast("Failed to save settings.");
   }
 };
 
-// ============================================================
-//  CLOSE & ARCHIVE SESSION
-// ============================================================
 window.confirmCloseSession = function () {
   if (!confirm("Close this auction and move it to the archive? Buyers will no longer be able to bid. This cannot be undone.")) return;
   closeSession();
@@ -186,7 +167,7 @@ async function closeSession() {
     activeSessionId = null;
     loadSessions();
   } catch (err) {
-    console.error("Failed to close session:", err);
+    console.error("Close failed:", err);
     showToast("Failed to close auction.");
   }
 }
@@ -205,11 +186,8 @@ function renderArchivedSessions(archived) {
   }
 
   listEl.innerHTML = `<div class="archive-grid">${archived.map(s => {
-    const createdAt = s.createdAt?.toDate
-      ? s.createdAt.toDate().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
-      : "—";
-    const closedAt = s.closedAt?.toDate
-      ? s.closedAt.toDate().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+    const fmt = ts => ts?.toDate
+      ? ts.toDate().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
       : "—";
     return `
       <div class="archive-card">
@@ -218,8 +196,8 @@ function renderArchivedSessions(archived) {
           <span class="session-badge archived">Archived</span>
         </div>
         <div class="archive-card-meta">
-          <span>Opened ${createdAt}</span>
-          <span>Closed ${closedAt}</span>
+          <span>Opened ${fmt(s.createdAt)}</span>
+          <span>Closed ${fmt(s.closedAt)}</span>
         </div>
         <button class="btn-secondary" onclick="viewArchive('${s.id}', '${s.name}')">
           View Results
@@ -229,9 +207,6 @@ function renderArchivedSessions(archived) {
   }).join("")}</div>`;
 }
 
-// ============================================================
-//  VIEW ARCHIVE RESULTS MODAL
-// ============================================================
 window.viewArchive = async function (sessionId, sessionName) {
   document.getElementById("modal-title").textContent     = `${sessionName} — Results`;
   document.getElementById("modal-body").innerHTML        =
@@ -249,7 +224,6 @@ window.viewArchive = async function (sessionId, sessionName) {
     const vehicles = vehicleSnap.docs.map(d => d.data());
     const bids     = bidSnap.docs.map(d => d.data());
 
-    // Find highest bid per vehicle
     const bidsByStock = {};
     bids.forEach(bid => {
       if (!bidsByStock[bid.stock] || bid.amount > bidsByStock[bid.stock].amount) {
@@ -257,35 +231,20 @@ window.viewArchive = async function (sessionId, sessionName) {
       }
     });
 
-    const soldCount  = vehicles.filter(v => bidsByStock[v["Stock #"]]).length;
+    const soldCount = vehicles.filter(v => bidsByStock[v["Stock #"]]).length;
 
     document.getElementById("modal-body").innerHTML = `
       <div class="modal-stats">
-        <div class="modal-stat">
-          <div class="lbl">Vehicles</div>
-          <div class="val">${vehicles.length}</div>
-        </div>
-        <div class="modal-stat">
-          <div class="lbl">Bids Received</div>
-          <div class="val">${bids.length}</div>
-        </div>
-        <div class="modal-stat">
-          <div class="lbl">Vehicles Sold</div>
-          <div class="val">${soldCount}</div>
-        </div>
+        <div class="modal-stat"><div class="lbl">Vehicles</div><div class="val">${vehicles.length}</div></div>
+        <div class="modal-stat"><div class="lbl">Total Bids</div><div class="val">${bids.length}</div></div>
+        <div class="modal-stat"><div class="lbl">Vehicles Sold</div><div class="val">${soldCount}</div></div>
       </div>
       <div class="results-table-wrap">
         <table class="results-table">
           <thead>
             <tr>
-              <th>Stock #</th>
-              <th>Vehicle</th>
-              <th>Store</th>
-              <th>Miles</th>
-              <th>Reserve</th>
-              <th>Winning Bid</th>
-              <th>Buyer</th>
-              <th>Status</th>
+              <th>Stock #</th><th>Vehicle</th><th>Store</th><th>Miles</th>
+              <th>Reserve</th><th>Winning Bid</th><th>Buyer</th><th>Status</th>
             </tr>
           </thead>
           <tbody>
@@ -300,16 +259,11 @@ window.viewArchive = async function (sessionId, sessionName) {
                     <td>${v["Stock #"] || "—"}</td>
                     <td>${v["Year"] || ""} ${v["Make"] || ""} ${v["Model"] || ""}</td>
                     <td>${(v["Store"] || "—").replace("Anderson ", "")}</td>
-                    <td>${(!v["Miles"] || Number(v["Miles"]) === 0)
-                      ? "—" : Number(v["Miles"]).toLocaleString()}</td>
+                    <td>${(!v["Miles"] || Number(v["Miles"]) === 0) ? "—" : Number(v["Miles"]).toLocaleString()}</td>
                     <td>$${reserve.toLocaleString()}</td>
-                    <td>${winner
-                      ? `$${Number(winner.amount).toLocaleString()}`
-                      : `<span class="no-bid-tag">No bids</span>`}</td>
+                    <td>${winner ? `$${Number(winner.amount).toLocaleString()}` : `<span class="no-bid-tag">No bids</span>`}</td>
                     <td>${winner ? (winner.buyerEmail || "—") : "—"}</td>
-                    <td>${winner
-                      ? `<span class="sold-tag">${metReserve ? "Sold" : "Reserve not met"}</span>`
-                      : "—"}</td>
+                    <td>${winner ? `<span class="sold-tag">${metReserve ? "Sold" : "Reserve not met"}</span>` : "—"}</td>
                   </tr>
                 `;
               }).join("")}
@@ -318,7 +272,7 @@ window.viewArchive = async function (sessionId, sessionName) {
       </div>
     `;
   } catch (err) {
-    console.error("Failed to load archive:", err);
+    console.error("Archive load failed:", err);
     document.getElementById("modal-body").innerHTML =
       `<p style="color:#A32D2D;text-align:center;padding:24px;">Failed to load results.</p>`;
   }
@@ -330,7 +284,7 @@ window.closeModal = function () {
 };
 
 // ============================================================
-//  CSV PARSE
+//  CSV PARSE & UPLOAD
 // ============================================================
 window.handleFileSelect = function (event) {
   const file = event.target.files[0];
@@ -359,21 +313,16 @@ function parseCSV(text) {
     })
     .filter(v => v["Stock #"]);
 
-  showPreview(headers, parsedVehicles);
-}
-
-function showPreview(headers, vehicles) {
-  document.getElementById("preview-label").textContent = `${vehicles.length} vehicles ready to publish`;
+  document.getElementById("preview-label").textContent = `${parsedVehicles.length} vehicles ready to publish`;
   document.getElementById("preview-table").innerHTML = `
     <thead><tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr></thead>
     <tbody>
-      ${vehicles.slice(0, 10).map(v =>
+      ${parsedVehicles.slice(0, 10).map(v =>
         `<tr>${headers.map(h => `<td>${v[h] || "—"}</td>`).join("")}</tr>`
       ).join("")}
-      ${vehicles.length > 10
+      ${parsedVehicles.length > 10
         ? `<tr><td colspan="${headers.length}" style="text-align:center;color:var(--color-text-muted);font-style:italic;">
-            ...and ${vehicles.length - 10} more vehicles
-           </td></tr>`
+            ...and ${parsedVehicles.length - 10} more vehicles</td></tr>`
         : ""}
     </tbody>
   `;
@@ -390,15 +339,11 @@ window.clearUpload = function () {
   document.getElementById("upload-progress").style.display = "none";
 };
 
-// ============================================================
-//  PUBLISH VEHICLES
-// ============================================================
 window.uploadVehicles = async function () {
   if (!parsedVehicles.length || !activeSessionId) return;
 
   const progressBar = document.getElementById("progress-bar");
   const progressLbl = document.getElementById("progress-label");
-
   document.getElementById("upload-actions").style.display  = "none";
   document.getElementById("upload-progress").style.display = "block";
 
@@ -472,8 +417,7 @@ async function loadInventory() {
                 <td>${v["Make"]  || "—"}</td>
                 <td>${v["Model"] || "—"}</td>
                 <td>${(!v["Color"] || v["Color"] === "0") ? "—" : v["Color"]}</td>
-                <td>${(!v["Miles"] || Number(v["Miles"]) === 0)
-                  ? "—" : Number(v["Miles"]).toLocaleString()}</td>
+                <td>${(!v["Miles"] || Number(v["Miles"]) === 0) ? "—" : Number(v["Miles"]).toLocaleString()}</td>
                 <td style="font-family:var(--font-mono);font-size:11px;">${v["VIN"] || "—"}</td>
                 <td>$${Number(v["Reserve"] || 0).toLocaleString()}</td>
               </tr>
@@ -483,7 +427,7 @@ async function loadInventory() {
       </div>
     `;
   } catch (err) {
-    console.error("Failed to load inventory:", err);
+    console.error("Inventory load failed:", err);
     listEl.innerHTML = `<p class="inventory-empty">Failed to load vehicles.</p>`;
   }
 }
@@ -496,9 +440,7 @@ window.confirmClearInventory = function () {
 async function clearInventory() {
   if (!activeSessionId) return;
   try {
-    const snapshot = await getDocs(
-      collection(db, "sessions", activeSessionId, "vehicles")
-    );
+    const snapshot = await getDocs(collection(db, "sessions", activeSessionId, "vehicles"));
     for (let i = 0; i < snapshot.docs.length; i += 499) {
       const batch = writeBatch(db);
       snapshot.docs.slice(i, i + 499).forEach(d => batch.delete(d.ref));
@@ -507,7 +449,7 @@ async function clearInventory() {
     showToast("All vehicles removed.");
     loadInventory();
   } catch (err) {
-    console.error("Failed to remove vehicles:", err);
+    console.error("Clear failed:", err);
     showToast("Failed to remove vehicles.");
   }
 }

@@ -1,63 +1,61 @@
 // ============================================================
 //  users.js — User management page
 //
-//  KEY FIX: User creation uses a SECONDARY Firebase app instance
-//  so that creating a new Auth account never signs out the admin.
-//  The secondary app is signed out immediately after the account
-//  is created — it only exists long enough to register the user.
+//  User creation uses a secondary Firebase app instance so
+//  that creating a new Auth account never signs out the admin.
 // ============================================================
 
-import { initializeApp }          from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth, onAuthStateChanged, signOut as fbSignOut,
-         createUserWithEmailAndPassword }
-                                   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, collection, getDocs, doc, setDoc, getDoc }
-                                   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { auth, db }                          from "./firebase.js";
+import { onAuthStateChanged, signOut
+         as fbSignOut, createUserWithEmailAndPassword }
+                                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { initializeApp }                     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth }                           from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { collection, getDocs, doc,
+         setDoc, getDoc }                    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-// ============================================================
-//  FIREBASE CONFIG
-// ============================================================
-const firebaseConfig = {
+// Secondary app — only used for createUserWithEmailAndPassword
+const secondaryApp  = initializeApp({
   apiKey:            "AIzaSyBUYsfVLBF6kF9pcnOguREn3dQQBvGfVbo",
   authDomain:        "andersonwholesale-2d4f4.firebaseapp.com",
   projectId:         "andersonwholesale-2d4f4",
   storageBucket:     "andersonwholesale-2d4f4.firebasestorage.app",
   messagingSenderId: "869988074727",
   appId:             "1:869988074727:web:f1b141289ba41d3d440e42"
-};
-
-// Primary app — maintains the admin's session
-const primaryApp  = initializeApp(firebaseConfig, "primary-users");
-const primaryAuth = getAuth(primaryApp);
-const db          = getFirestore(primaryApp);
-
-// Secondary app — used only for creating new users, never disrupts admin session
-const secondaryApp  = initializeApp(firebaseConfig, "secondary");
+}, "secondary");
 const secondaryAuth = getAuth(secondaryApp);
 
 // ============================================================
 //  STATE
 // ============================================================
-let currentUser = null;
+let authResolved = false;
 
 // ============================================================
 //  AUTH GATE
 // ============================================================
-onAuthStateChanged(primaryAuth, async user => {
+onAuthStateChanged(auth, async user => {
+  if (authResolved) return;
+  authResolved = true;
+
   if (!user) {
     window.location.href = "../login.html";
     return;
   }
 
-  const userSnap = await getDoc(doc(db, "users", user.uid));
-  if (!userSnap.exists() || userSnap.data().role !== "admin") {
-    alert("Access denied. Admin accounts only.");
-    await fbSignOut(primaryAuth);
+  try {
+    const userSnap = await getDoc(doc(db, "users", user.uid));
+    if (!userSnap.exists() || userSnap.data().role !== "admin") {
+      alert("Access denied. Admin accounts only.");
+      await fbSignOut(auth);
+      window.location.href = "../login.html";
+      return;
+    }
+  } catch (err) {
+    console.error("Role check failed:", err);
     window.location.href = "../login.html";
     return;
   }
 
-  currentUser = user;
   document.getElementById("header-user").textContent     = user.email;
   document.getElementById("user-menu").style.display     = "block";
   document.getElementById("admin-content").style.display = "block";
@@ -80,12 +78,13 @@ document.addEventListener("click", e => {
 });
 
 window.adminSignOut = async function () {
-  await fbSignOut(primaryAuth);
+  authResolved = false;
+  await fbSignOut(auth);
   window.location.href = "../login.html";
 };
 
 // ============================================================
-//  LOAD USERS from Firestore users collection
+//  LOAD USERS
 // ============================================================
 async function loadUsers() {
   const listEl = document.getElementById("users-list");
@@ -93,7 +92,6 @@ async function loadUsers() {
 
   try {
     const snapshot = await getDocs(collection(db, "users"));
-
     document.getElementById("users-count").textContent =
       snapshot.empty ? "" : `(${snapshot.size})`;
 
@@ -111,10 +109,7 @@ async function loadUsers() {
         <table class="users-table">
           <thead>
             <tr>
-              <th>Email</th>
-              <th>Role</th>
-              <th>Created</th>
-              <th>UID</th>
+              <th>Email</th><th>Role</th><th>Created</th><th>UID</th>
             </tr>
           </thead>
           <tbody>
@@ -139,7 +134,6 @@ async function loadUsers() {
         </table>
       </div>
     `;
-
   } catch (err) {
     console.error("Failed to load users:", err);
     listEl.innerHTML = `<p class="users-empty">Failed to load users. Please refresh.</p>`;
@@ -148,7 +142,7 @@ async function loadUsers() {
 
 // ============================================================
 //  CREATE USER
-//  Uses secondary app instance so admin session is never touched
+//  Uses secondary app — admin session never interrupted
 // ============================================================
 window.createUser = async function () {
   const email    = document.getElementById("new-user-email").value.trim();
@@ -159,7 +153,6 @@ window.createUser = async function () {
 
   errorEl.style.display = "none";
 
-  // Validate
   if (!email || !password) {
     errorEl.textContent   = "Email and password are required.";
     errorEl.style.display = "block";
@@ -175,16 +168,14 @@ window.createUser = async function () {
   btn.textContent = "Creating...";
 
   try {
-    // Step 1 — Create Auth account on SECONDARY app (admin stays signed in)
-    const credential = await createUserWithEmailAndPassword(
-      secondaryAuth, email, password
-    );
-    const newUid = credential.user.uid;
+    // Create Auth account on secondary app — admin stays signed in
+    const credential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+    const newUid     = credential.user.uid;
 
-    // Step 2 — Sign the secondary app out immediately
+    // Sign secondary app out immediately
     await fbSignOut(secondaryAuth);
 
-    // Step 3 — Write user doc to Firestore via PRIMARY app (still authenticated)
+    // Write user doc to Firestore via primary db
     await setDoc(doc(db, "users", newUid), {
       email,
       role,
@@ -209,19 +200,12 @@ window.createUser = async function () {
   }
 };
 
-// ============================================================
-//  FRIENDLY ERROR MESSAGES
-// ============================================================
 function friendlyAuthError(code) {
   switch (code) {
-    case "auth/email-already-in-use":
-      return "An account with that email already exists.";
-    case "auth/invalid-email":
-      return "Please enter a valid email address.";
-    case "auth/weak-password":
-      return "Password must be at least 6 characters.";
-    default:
-      return "Failed to create user. Please try again.";
+    case "auth/email-already-in-use": return "An account with that email already exists.";
+    case "auth/invalid-email":        return "Please enter a valid email address.";
+    case "auth/weak-password":        return "Password must be at least 6 characters.";
+    default:                          return "Failed to create user. Please try again.";
   }
 }
 

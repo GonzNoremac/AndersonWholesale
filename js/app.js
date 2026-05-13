@@ -1,29 +1,13 @@
 // ============================================================
 //  app.js — Buyer-facing auction SRP
-//  Requires: Firebase Auth + Firestore
 // ============================================================
 
-import { initializeApp }         from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth, onAuthStateChanged, signOut as fbSignOut }
-                                  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, collection, getDocs, doc, setDoc, getDoc }
-                                  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
-// ============================================================
-//  FIREBASE CONFIG
-// ============================================================
-const firebaseConfig = {
-  apiKey:            "AIzaSyBUYsfVLBF6kF9pcnOguREn3dQQBvGfVbo",
-  authDomain:        "andersonwholesale-2d4f4.firebaseapp.com",
-  projectId:         "andersonwholesale-2d4f4",
-  storageBucket:     "andersonwholesale-2d4f4.firebasestorage.app",
-  messagingSenderId: "869988074727",
-  appId:             "1:869988074727:web:f1b141289ba41d3d440e42"
-};
-
-const app  = initializeApp(firebaseConfig, "buyer");
-const auth = getAuth(app);
-const db   = getFirestore(app);
+import { auth, db }                          from "./firebase.js";
+import { onAuthStateChanged, signOut
+         as fbSignOut }                      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { collection, getDocs, doc,
+         setDoc, getDoc, query,
+         where }                             from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 // ============================================================
 //  STATE
@@ -32,11 +16,19 @@ let allVehicles   = [];
 let activeFilter  = "all";
 let submittedBids = {};
 let currentUser   = null;
+let activeSession = null;
 
 // ============================================================
 //  AUTH GATE
+//  Wait for Firebase to confirm auth state before doing anything.
+//  Redirects to login if no user. Does not redirect if user exists.
 // ============================================================
+let authResolved = false;
+
 onAuthStateChanged(auth, async user => {
+  if (authResolved) return;   // Ignore subsequent fires
+  authResolved = true;
+
   if (!user) {
     window.location.href = "login.html";
     return;
@@ -45,10 +37,10 @@ onAuthStateChanged(auth, async user => {
   currentUser = user;
 
   // Show user menu
-  document.getElementById("header-user").textContent   = user.email;
-  document.getElementById("user-menu").style.display   = "block";
+  document.getElementById("header-user").textContent = user.email;
+  document.getElementById("user-menu").style.display = "block";
 
-  // Check if admin — show Admin Panel link if so
+  // Check admin role — show Admin Panel link if applicable
   try {
     const userSnap = await getDoc(doc(db, "users", user.uid));
     if (userSnap.exists() && userSnap.data().role === "admin") {
@@ -58,20 +50,18 @@ onAuthStateChanged(auth, async user => {
     console.error("Could not read user role:", err);
   }
 
-  // Reveal main content and load data
   document.getElementById("main-content").style.display = "block";
   loadAuctionMeta();
   loadVehicles();
 });
 
 // ============================================================
-//  USER MENU TOGGLE
+//  USER MENU
 // ============================================================
 window.toggleUserMenu = function () {
   document.getElementById("user-menu-dropdown").classList.toggle("open");
 };
 
-// Close menu when clicking outside
 document.addEventListener("click", e => {
   const menu = document.getElementById("user-menu");
   if (menu && !menu.contains(e.target)) {
@@ -79,64 +69,81 @@ document.addEventListener("click", e => {
   }
 });
 
-// ============================================================
-//  SIGN OUT
-// ============================================================
 window.signOut = async function () {
+  authResolved = false;
   await fbSignOut(auth);
   window.location.href = "login.html";
 };
 
 // ============================================================
-//  LOAD AUCTION META
+//  LOAD AUCTION META — reads the active session
 // ============================================================
 async function loadAuctionMeta() {
   try {
-    const snap = await getDoc(doc(db, "auctions", "current"));
-    if (!snap.exists()) return;
+    const snapshot = await getDocs(
+      query(collection(db, "sessions"), where("status", "==", "active"))
+    );
 
-    const { status, closesAt } = snap.data();
+    if (snapshot.empty) {
+      const statusEl = document.getElementById("auction-status");
+      statusEl.textContent = "No Active Auction";
+      statusEl.className   = "auction-status closed";
+      return;
+    }
+
+    activeSession = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
 
     const statusEl = document.getElementById("auction-status");
-    statusEl.textContent = status === "open" ? "Auction Open" : "Auction Closed";
-    statusEl.className   = `auction-status ${status === "open" ? "open" : "closed"}`;
+    statusEl.textContent = "Auction Open";
+    statusEl.className   = "auction-status open";
 
-    if (closesAt) {
-      const date = closesAt.toDate ? closesAt.toDate() : new Date(closesAt);
-      const fmt  = date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-      document.getElementById("auction-close").textContent =
-        `Closes ${fmt}`;
-      document.getElementById("stat-closes").textContent =
+    if (activeSession.closesAt) {
+      const date = activeSession.closesAt.toDate
+        ? activeSession.closesAt.toDate()
+        : new Date(activeSession.closesAt);
+      const fmt = date.toLocaleDateString("en-US", {
+        month: "short", day: "numeric", year: "numeric"
+      });
+      document.getElementById("auction-close").textContent = `Closes ${fmt}`;
+      document.getElementById("stat-closes").textContent   =
         date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
     }
+
   } catch (err) {
     console.error("Failed to load auction meta:", err);
   }
 }
 
 // ============================================================
-//  LOAD VEHICLES
+//  LOAD VEHICLES — from active session subcollection
 // ============================================================
 async function loadVehicles() {
   const listEl = document.getElementById("vehicle-list");
   listEl.innerHTML = `<div class="state-message"><strong>Loading inventory...</strong>Please wait.</div>`;
 
   try {
-    // Find active session first
-    const sessionSnap = await getDocs(collection(db, "sessions"));
-    const activeSession = sessionSnap.docs.find(d => d.data().status === "active");
+    // Find active session if not already loaded
     if (!activeSession) {
-      listEl.innerHTML = `<div class="state-message"><strong>No active auction.</strong>Check back when the next auction opens.</div>`;
+      const snapshot = await getDocs(
+        query(collection(db, "sessions"), where("status", "==", "active"))
+      );
+      if (snapshot.empty) {
+        listEl.innerHTML = `<div class="state-message"><strong>No active auction.</strong>Check back when the next auction opens.</div>`;
+        return;
+      }
+      activeSession = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+    }
+
+    const vehicleSnap = await getDocs(
+      collection(db, "sessions", activeSession.id, "vehicles")
+    );
+
+    if (vehicleSnap.empty) {
+      listEl.innerHTML = `<div class="state-message"><strong>No vehicles listed yet.</strong>Check back soon.</div>`;
       return;
     }
-    const snapshot = await getDocs(collection(db, "sessions", activeSession.id, "vehicles"));
 
-    if (snapshot.empty) {
-      listEl.innerHTML = `<div class="state-message"><strong>No vehicles listed.</strong>Check back when the next auction opens.</div>`;
-      return;
-    }
-
-    allVehicles = snapshot.docs.map(d => {
+    allVehicles = vehicleSnap.docs.map(d => {
       const v = d.data();
       return {
         id:    d.id,
@@ -148,6 +155,7 @@ async function loadVehicles() {
         color: v["Color"]   || "",
         vin:   v["VIN"]     || "",
         miles: v["Miles"]   || "",
+        // reserve intentionally excluded
       };
     });
 
@@ -157,7 +165,7 @@ async function loadVehicles() {
 
   } catch (err) {
     console.error("Failed to load vehicles:", err);
-    listEl.innerHTML = `<div class="state-message"><strong>Could not load inventory.</strong>Please refresh or contact support.</div>`;
+    listEl.innerHTML = `<div class="state-message"><strong>Could not load inventory.</strong>Please refresh.</div>`;
   }
 }
 
@@ -195,7 +203,7 @@ window.setFilter = function (store, btn) {
 };
 
 // ============================================================
-//  RENDER VEHICLE LIST
+//  RENDER VEHICLES
 // ============================================================
 function renderVehicles() {
   const filtered = activeFilter === "all"
@@ -207,7 +215,7 @@ function renderVehicles() {
 
   const listEl = document.getElementById("vehicle-list");
 
-  if (filtered.length === 0) {
+  if (!filtered.length) {
     listEl.innerHTML = `<div class="state-message"><strong>No vehicles found.</strong>Try a different store filter.</div>`;
     return;
   }
@@ -216,15 +224,13 @@ function renderVehicles() {
 }
 
 // ============================================================
-//  BUILD VEHICLE ROW
+//  VEHICLE ROW
 // ============================================================
 function buildVehicleRow(v) {
   const isSubmitted  = submittedBids[v.stock];
   const displayColor = (!v.color || v.color === "0") ? "—" : v.color;
   const displayMiles = (!v.miles || Number(v.miles) === 0)
-    ? "—"
-    : Number(v.miles).toLocaleString();
-  const storeName = v.store.replace("Anderson ", "");
+    ? "—" : Number(v.miles).toLocaleString();
 
   const bidColumn = isSubmitted
     ? `<span class="bid-submitted-tag">&#10003; Bid Submitted</span>`
@@ -257,7 +263,7 @@ function buildVehicleRow(v) {
     <div class="vehicle-row ${isSubmitted ? "bid-submitted" : ""}" id="row-${v.stock}">
       <div class="col-lot">
         <span class="stock-badge">${v.stock}</span>
-        <span class="store-name">${storeName}</span>
+        <span class="store-name">${v.store.replace("Anderson ", "")}</span>
       </div>
       <div class="col-info">
         <p class="vehicle-title">${v.year} ${v.make} ${v.model}</p>
@@ -277,15 +283,13 @@ function buildVehicleRow(v) {
         </div>
         <p class="vehicle-vin">VIN: ${v.vin}</p>
       </div>
-      <div class="col-bid">
-        ${bidColumn}
-      </div>
+      <div class="col-bid">${bidColumn}</div>
     </div>
   `;
 }
 
 // ============================================================
-//  BID INPUT HANDLER
+//  BID INPUT
 // ============================================================
 window.onBidInput = function (stock) {
   const val = parseInt(document.getElementById(`input-${stock}`).value);
@@ -293,9 +297,10 @@ window.onBidInput = function (stock) {
 };
 
 // ============================================================
-//  SUBMIT BID
+//  SUBMIT BID — writes to sessions/{id}/bids/{stock}_{uid}
 // ============================================================
 window.submitBid = async function (stock) {
+  if (!activeSession) return;
   const input  = document.getElementById(`input-${stock}`);
   const amount = parseInt(input.value);
   if (!amount || amount < 1) return;
@@ -305,18 +310,16 @@ window.submitBid = async function (stock) {
   btn.textContent = "Saving...";
 
   try {
-    // Get active session for bid path
-    const sessionSnap = await getDocs(collection(db, "sessions"));
-    const activeSession = sessionSnap.docs.find(d => d.data().status === "active");
-    if (!activeSession) { showToast("No active auction found."); return; }
-    const bidRef = doc(db, "sessions", activeSession.id, "bids", `${stock}_${currentUser.uid}`);
-    await setDoc(bidRef, {
-      stock:      stock,
-      buyerId:    currentUser.uid,
-      buyerEmail: currentUser.email,
-      amount:     amount,
-      timestamp:  new Date().toISOString()
-    });
+    await setDoc(
+      doc(db, "sessions", activeSession.id, "bids", `${stock}_${currentUser.uid}`),
+      {
+        stock,
+        buyerId:    currentUser.uid,
+        buyerEmail: currentUser.email,
+        amount,
+        timestamp:  new Date().toISOString()
+      }
+    );
 
     submittedBids[stock] = true;
     updateBidStat();
@@ -328,7 +331,7 @@ window.submitBid = async function (stock) {
     showToast(`Bid submitted — ${stock}`);
 
   } catch (err) {
-    console.error("Bid submission failed:", err);
+    console.error("Bid failed:", err);
     btn.disabled    = false;
     btn.textContent = "Submit";
     showToast("Something went wrong. Please try again.");
